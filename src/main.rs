@@ -14,6 +14,9 @@ use cli_parser::parse_blocks;
 mod data_fetcher;
 use data_fetcher::fetch_data;
 
+mod data_writer;
+use data_writer::write_data;
+
 #[derive(Debug, Parser)]
 #[command(version, about, long_about=None)]
 struct Cli {
@@ -66,17 +69,14 @@ async fn main() {
         "blocks" | "block" => Datasets::Blocks,
         _ => Datasets::None
     };
-
+    // TODO analyze output directory to prevent redundant data downloading
+    
     // Fetch
     let data = fetch_data(stark_client, dataset, (block_start, block_end)).await;
 
     // Potentially transform data (remove bad columns, parse types, etc)
     
     // Export data
-    let mut wtr = csv::Writer::from_path(args.path.as_str()).unwrap();
-    wtr.write_record(&["block_number", "block_timestamp"]).unwrap();
-    for block in data {
-        wtr.serialize(&[format!("{}", block.block_number), format!("{}", block.timestamp)]).unwrap();
-    }
-    wtr.flush().unwrap();
+    write_data(data, args.path.as_str());
+
 }
