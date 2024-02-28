@@ -1,6 +1,6 @@
-use crate::Datasets;
+use crate::{Data, Datasets};
 use kdam::tqdm;
-use starknet::core::types::{BlockId, BlockWithTxHashes, MaybePendingBlockWithTxHashes};
+use starknet::core::types::{BlockId, MaybePendingBlockWithTxHashes};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::{JsonRpcClient, Provider};
 
@@ -8,17 +8,17 @@ pub async fn fetch_data(
     client: JsonRpcClient<HttpTransport>,
     dataset: Datasets,
     (block_start, block_end): (u64, u64),
-) -> Vec<BlockWithTxHashes> {
+) -> Data {
     match dataset {
         Datasets::Blocks => fetch_blocks(client, (block_start, block_end)).await,
-        Datasets::None => Vec::new(),
+        Datasets::None => Data::None,
     }
 }
 
 pub async fn fetch_blocks(
     client: JsonRpcClient<HttpTransport>,
     (block_start, block_end): (u64, u64),
-) -> Vec<BlockWithTxHashes> {
+) -> Data {
     let mut data = Vec::new();
     for block in tqdm!(block_start..(block_end + 1)) {
         match client
@@ -31,5 +31,5 @@ pub async fn fetch_blocks(
         };
     }
 
-    data
+    Data::Blocks(data)
 }
