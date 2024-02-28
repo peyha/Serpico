@@ -2,7 +2,7 @@ use clap::Parser;
 use starknet::providers::{JsonRpcClient, Provider};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url ;
-use starknet::core::types::BlockId;
+use starknet::core::types::{BlockId, BlockWithTxHashes};
 use starknet::core::types::MaybePendingBlockWithTxs;
 use kdam::tqdm;
 use std::io;
@@ -47,6 +47,11 @@ enum Datasets{
     Blocks,
     // Traces
     // Transactions
+    None,
+}
+
+enum Data {
+    Blocks(Vec<BlockWithTxHashes>),
     None,
 }
 
