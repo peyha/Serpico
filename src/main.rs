@@ -1,12 +1,8 @@
 use clap::Parser;
-use starknet::providers::{JsonRpcClient, Provider};
+use starknet::core::types::BlockWithTxHashes;
 use starknet::providers::jsonrpc::HttpTransport;
-use starknet::providers::Url ;
-use starknet::core::types::{BlockId, BlockWithTxHashes};
-use starknet::core::types::MaybePendingBlockWithTxs;
-use kdam::tqdm;
-use std::io;
-use std::fs::File;
+use starknet::providers::Url;
+use starknet::providers::{JsonRpcClient, Provider};
 
 mod cli_parser;
 use cli_parser::parse_blocks;
@@ -27,11 +23,11 @@ struct Cli {
     // Block interval to use
     #[arg(short, long)]
     blocks: String,
-    
+
     // Dataset to fetch
     #[arg(short, long)]
-    dataset: String, 
-    
+    dataset: String,
+
     //TODO add parameters
     #[arg(short, long, default_value_t = String::from("all"))]
     columns: String,
@@ -43,7 +39,7 @@ struct Cli {
     export_type: String,
 }
 
-enum Datasets{
+enum Datasets {
     Blocks,
     // Traces
     // Transactions
@@ -57,14 +53,11 @@ enum Data {
 
 #[tokio::main]
 async fn main() {
-
     let args = Cli::parse();
 
-    let stark_client = JsonRpcClient::new(
-        HttpTransport::new(
-            Url::parse(args.rpc_url.as_str()).unwrap()
-        )
-    );
+    let stark_client = JsonRpcClient::new(HttpTransport::new(
+        Url::parse(args.rpc_url.as_str()).unwrap(),
+    ));
 
     let block_number = stark_client.block_number().await.unwrap();
 
@@ -72,16 +65,15 @@ async fn main() {
 
     let dataset = match args.dataset.as_str() {
         "blocks" | "block" => Datasets::Blocks,
-        _ => Datasets::None
+        _ => Datasets::None,
     };
     // TODO analyze output directory to prevent redundant data downloading
-    
+
     // Fetch
     let data = fetch_data(stark_client, dataset, (block_start, block_end)).await;
 
     // Potentially transform data (remove bad columns, parse types, etc)
-    
-    // Export data
-    write_data(data, args.path.as_str());
 
+    // Export data
+    write_data(data, args.path.as_str()).unwrap();
 }

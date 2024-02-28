@@ -1,6 +1,6 @@
-use crate::{Datasets, Data};
+use crate::{Data, Datasets};
 use kdam::tqdm;
-use starknet::core::types::{BlockId, BlockWithTxHashes, MaybePendingBlockWithTxHashes};
+use starknet::core::types::{BlockId, MaybePendingBlockWithTxHashes};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::{JsonRpcClient, Provider};
 
