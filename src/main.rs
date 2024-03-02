@@ -3,6 +3,9 @@ use starknet::core::types::BlockWithTxHashes;
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
+use std::sync::mpsc::channel;
+use std::thread;
+use tokio::runtime::Runtime;
 
 mod cli_parser;
 use cli_parser::parse_blocks;
@@ -12,6 +15,9 @@ use data_fetcher::fetch_data;
 
 mod data_writer;
 use data_writer::write_data;
+
+mod utils;
+use utils::split_block_chunks;
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about=None)]
@@ -37,6 +43,9 @@ struct Cli {
 
     #[arg(short, long, default_value_t = String::from("csv"))]
     export_type: String,
+
+    #[arg(short, long, default_value_t = 10000)]
+    chunk_size: u64,
 }
 
 enum Datasets {
@@ -62,6 +71,7 @@ async fn main() {
     let block_number = stark_client.block_number().await.unwrap();
 
     let (block_start, block_end) = parse_blocks(args.blocks, block_number).unwrap();
+    let block_chunks = split_block_chunks(block_start, block_end, args.chunk_size);
 
     let dataset = match args.dataset.as_str() {
         "blocks" | "block" => Datasets::Blocks,
@@ -70,6 +80,20 @@ async fn main() {
     // TODO analyze output directory to prevent redundant data downloading
 
     // Fetch
+    let data_chunks = Vec::new();
+    let handles = Vec::new();
+
+    let mut rt = Runtime::new().unwrap();
+    rt.block_on(async move {
+        for (block_chunk_start, block_chunk_end) in block_chunks {
+            fetch_data(stark_client, dataset, (block_chunk_start, block_chunk_end)).await;
+        }
+    });
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
     let data = fetch_data(stark_client, dataset, (block_start, block_end)).await;
 
     // Potentially transform data (remove bad columns, parse types, etc)
