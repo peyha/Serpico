@@ -48,6 +48,7 @@ struct Cli {
     chunk_size: u64,
 }
 
+#[derive(Debug, Clone, Copy)]
 enum Datasets {
     Blocks,
     // Traces
@@ -80,21 +81,36 @@ async fn main() {
     // TODO analyze output directory to prevent redundant data downloading
 
     // Fetch
-    let data_chunks = Vec::new();
-    let handles = Vec::new();
+    let mut handles = Vec::new();
 
-    let mut rt = Runtime::new().unwrap();
-    rt.block_on(async move {
-        for (block_chunk_start, block_chunk_end) in block_chunks {
-            fetch_data(stark_client, dataset, (block_chunk_start, block_chunk_end)).await;
-        }
-    });
-
-    for handle in handles {
-        handle.join().unwrap();
+    for (block_chunk_start, block_chunk_end) in block_chunks {
+        let handle = tokio::spawn(async move {
+            fetch_data(
+                JsonRpcClient::new(HttpTransport::new(
+                    Url::parse(args.rpc_url.as_str()).unwrap(),
+                )),
+                dataset,
+                (block_chunk_start, block_chunk_end),
+            )
+            .await
+        });
+        handles.push(handle);
     }
 
-    let data = fetch_data(stark_client, dataset, (block_start, block_end)).await;
+    let data = match dataset {
+        Datasets::Blocks => Data::Blocks(Vec::new()),
+        Datasets::None => Data::None,
+    };
+
+    for handle in handles {
+        let data_chunk = handle.await.unwrap();
+
+        if let (Data::Blocks(mut x), Data::Blocks(y)) = (data, data_chunk) {
+            x.extend(y.iter().cloned());
+        }
+    }
+
+    //let data = fetch_data(stark_client, dataset, (block_start, block_end)).await;
 
     // Potentially transform data (remove bad columns, parse types, etc)
 
