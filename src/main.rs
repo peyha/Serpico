@@ -3,9 +3,7 @@ use starknet::core::types::BlockWithTxHashes;
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
-use std::sync::mpsc::channel;
-use std::thread;
-use tokio::runtime::Runtime;
+use std::sync::Arc;
 
 mod cli_parser;
 use cli_parser::parse_blocks;
@@ -44,7 +42,7 @@ struct Cli {
     #[arg(short, long, default_value_t = String::from("csv"))]
     export_type: String,
 
-    #[arg(short, long, default_value_t = 10000)]
+    #[arg(long, default_value_t = 10000)]
     chunk_size: u64,
 }
 
@@ -74,42 +72,54 @@ async fn main() {
     let (block_start, block_end) = parse_blocks(args.blocks, block_number).unwrap();
     let block_chunks = split_block_chunks(block_start, block_end, args.chunk_size);
 
+    println!("There are {} chunks", block_chunks.len());
     let dataset = match args.dataset.as_str() {
         "blocks" | "block" => Datasets::Blocks,
         _ => Datasets::None,
     };
     // TODO analyze output directory to prevent redundant data downloading
 
+    let rpc_url = Arc::new(args.rpc_url);
     // Fetch
     let mut handles = Vec::new();
 
+    let mut chunk_id = 0;
     for (block_chunk_start, block_chunk_end) in block_chunks {
+        let cur_rpc_url = rpc_url.clone();
         let handle = tokio::spawn(async move {
             fetch_data(
                 JsonRpcClient::new(HttpTransport::new(
-                    Url::parse(args.rpc_url.as_str()).unwrap(),
+                    Url::parse(cur_rpc_url.as_str()).unwrap(),
                 )),
                 dataset,
                 (block_chunk_start, block_chunk_end),
+                chunk_id as u16,
             )
             .await
         });
         handles.push(handle);
+        chunk_id += 1;
     }
 
-    let data = match dataset {
-        Datasets::Blocks => Data::Blocks(Vec::new()),
-        Datasets::None => Data::None,
-    };
-
+    let mut merged_data = Vec::new();
     for handle in handles {
         let data_chunk = handle.await.unwrap();
 
-        if let (Data::Blocks(mut x), Data::Blocks(y)) = (data, data_chunk) {
-            x.extend(y.iter().cloned());
+        if let Data::Blocks(data_chunk) = data_chunk {
+            merged_data.extend(data_chunk);
         }
     }
 
+    // sort data
+    match dataset {
+        Datasets::Blocks => merged_data.sort_by_key(|b| b.block_number),
+        Datasets::None => (),
+    };
+
+    let data = match dataset {
+        Datasets::Blocks => Data::Blocks(merged_data),
+        Datasets::None => Data::None,
+    };
     //let data = fetch_data(stark_client, dataset, (block_start, block_end)).await;
 
     // Potentially transform data (remove bad columns, parse types, etc)
