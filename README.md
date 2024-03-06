@@ -16,7 +16,10 @@ Other datasets will be added ASAP
 
 1. Install Rust
 2. Use the following command
-   `cargo run -- --rpc-url <RPC_URL> --blocks <block_start>:<block_end> --dataset <dataset_name> --path <output_file_path>`
+
+```
+cargo run -- --rpc-url <RPC_URL> --blocks <block_start>:<block_end> --dataset <dataset_name> --path <output_file_path>
+```
 
 ## Improvement list
 
