@@ -14,6 +14,7 @@ pub fn write_data(data: Data, path: &str) -> Result<()> {
                 ])?;
             }
         }
+        Data::Transactions(txs) => todo!(),
         Data::None => (),
     };
 

@@ -12,6 +12,7 @@ pub async fn fetch_data(
 ) -> Data {
     match dataset {
         Datasets::Blocks => fetch_blocks(client, (block_start, block_end), chunk_id).await,
+        Datasets::Transactions => todo!(),
         Datasets::None => Data::None,
     }
 }

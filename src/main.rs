@@ -1,5 +1,5 @@
 use clap::Parser;
-use starknet::core::types::BlockWithTxHashes;
+use starknet::core::types::{BlockWithTxHashes, Transaction};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
@@ -49,6 +49,7 @@ struct Cli {
 #[derive(Debug, Clone, Copy)]
 enum Datasets {
     Blocks,
+    Transactions,
     // Traces
     // Transactions
     None,
@@ -56,6 +57,7 @@ enum Datasets {
 
 enum Data {
     Blocks(Vec<BlockWithTxHashes>),
+    Transactions(Vec<Transaction>),
     None,
 }
 
@@ -75,6 +77,7 @@ async fn main() {
     println!("There are {} chunks", block_chunks.len());
     let dataset = match args.dataset.as_str() {
         "blocks" | "block" => Datasets::Blocks,
+        "transactions" | "transaction" => Datasets::Transactions,
         _ => Datasets::None,
     };
     // TODO analyze output directory to prevent redundant data downloading
@@ -113,11 +116,13 @@ async fn main() {
     // sort data
     match dataset {
         Datasets::Blocks => merged_data.sort_by_key(|b| b.block_number),
+        Datasets::Transactions => todo!(),
         Datasets::None => (),
     };
 
     let data = match dataset {
         Datasets::Blocks => Data::Blocks(merged_data),
+        Datasets::Transactions => todo!(),
         Datasets::None => Data::None,
     };
     //let data = fetch_data(stark_client, dataset, (block_start, block_end)).await;
