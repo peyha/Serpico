@@ -1,5 +1,5 @@
 use clap::Parser;
-use starknet::core::types::BlockWithTxHashes;
+use starknet::core::types::{BlockWithTxHashes, Transaction};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
@@ -49,6 +49,7 @@ struct Cli {
 #[derive(Debug, Clone, Copy)]
 enum Datasets {
     Blocks,
+    Transactions,
     // Traces
     // Transactions
     None,
@@ -56,7 +57,34 @@ enum Datasets {
 
 enum Data {
     Blocks(Vec<BlockWithTxHashes>),
+    Transactions(Vec<(Transaction, u64)>),
     None,
+}
+
+impl Data {
+    pub fn new(dataset: Datasets) -> Self {
+        match dataset {
+            Datasets::Blocks => Data::Blocks(Vec::new()),
+            Datasets::Transactions => Data::Transactions(Vec::new()),
+            Datasets::None => Data::None,
+        }
+    }
+
+    pub fn sort_data(&mut self) -> () {
+        match self {
+            Data::Blocks(blocks) => blocks.sort_by_key(|b| b.block_number),
+            Data::Transactions(txs) => txs.sort_by_key(|tx| tx.1),
+            Data::None => (),
+        }
+    }
+
+    pub fn extend_data(&mut self, data: Data) {
+        match (self, data) {
+            (Data::Blocks(blocks), Data::Blocks(other_blocks)) => blocks.extend(other_blocks),
+            (Data::Transactions(txs), Data::Transactions(other_txs)) => txs.extend(other_txs),
+            _ => (),
+        }
+    }
 }
 
 #[tokio::main]
@@ -75,6 +103,7 @@ async fn main() {
     println!("There are {} chunks", block_chunks.len());
     let dataset = match args.dataset.as_str() {
         "blocks" | "block" => Datasets::Blocks,
+        "transactions" | "transaction" => Datasets::Transactions,
         _ => Datasets::None,
     };
     // TODO analyze output directory to prevent redundant data downloading
@@ -101,29 +130,19 @@ async fn main() {
         chunk_id += 1;
     }
 
-    let mut merged_data = Vec::new();
+    let mut merged_data = Data::new(dataset);
+
     for handle in handles {
         let data_chunk = handle.await.unwrap();
-
-        if let Data::Blocks(data_chunk) = data_chunk {
-            merged_data.extend(data_chunk);
-        }
+        merged_data.extend_data(data_chunk);
     }
 
     // sort data
-    match dataset {
-        Datasets::Blocks => merged_data.sort_by_key(|b| b.block_number),
-        Datasets::None => (),
-    };
-
-    let data = match dataset {
-        Datasets::Blocks => Data::Blocks(merged_data),
-        Datasets::None => Data::None,
-    };
+    merged_data.sort_data();
     //let data = fetch_data(stark_client, dataset, (block_start, block_end)).await;
 
     // Potentially transform data (remove bad columns, parse types, etc)
 
     // Export data
-    write_data(data, args.path.as_str()).unwrap();
+    write_data(merged_data, args.path.as_str()).unwrap();
 }
