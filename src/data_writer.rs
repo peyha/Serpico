@@ -1,5 +1,6 @@
 use crate::Data;
 use anyhow::Result;
+use starknet::core::types::Transaction;
 
 pub fn write_data(data: Data, path: &str) -> Result<()> {
     let mut wtr = csv::Writer::from_path(path)?;
@@ -14,7 +15,20 @@ pub fn write_data(data: Data, path: &str) -> Result<()> {
                 ])?;
             }
         }
-        Data::Transactions(txs) => todo!(),
+        Data::Transactions(txs) => {
+            wtr.write_record(&["tx_hash", "tx_type"])?;
+            for tx in txs {
+                let tx_type = match tx {
+                    Transaction::Invoke(_) => "invoke",
+                    Transaction::L1Handler(_) => "l1handler",
+                    Transaction::Declare(_) => "declare",
+                    Transaction::Deploy(_) => "deploy",
+                    Transaction::DeployAccount(_) => "deploy_account",
+                };
+
+                wtr.serialize(&[format!("{}", tx.transaction_hash()), tx_type.to_string()])?;
+            }
+        }
         Data::None => (),
     };
 
