@@ -57,7 +57,7 @@ enum Datasets {
 
 enum Data {
     Blocks(Vec<BlockWithTxHashes>),
-    Transactions(Vec<Transaction>),
+    Transactions(Vec<(Transaction, u64)>),
     None,
 }
 

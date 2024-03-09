@@ -61,7 +61,7 @@ pub async fn fetch_txs(
             continuer = false;
             match client.get_block_with_txs(BlockId::Number(block)).await {
                 Ok(MaybePendingBlockWithTxs::Block(b)) => {
-                    data.extend(b.transactions);
+                    data.extend(b.transactions.iter().map(|t| (t.clone(), block)))
                 }
                 Ok(MaybePendingBlockWithTxs::PendingBlock(_)) => (),
                 Err(_) => continuer = true,
