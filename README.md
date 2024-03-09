@@ -9,6 +9,7 @@ Starkryo is a tool made to query large amount of data to Starknet nodes. By spec
 Currently, the available datasets are
 
 - Blocks
+- Transactions
 
 Other datasets will be added ASAP
 
