@@ -1,6 +1,8 @@
 use crate::{Data, Datasets};
 use kdam::tqdm;
-use starknet::core::types::{BlockId, MaybePendingBlockWithTxHashes, MaybePendingBlockWithTxs};
+use starknet::core::types::{
+    BlockId, EmittedEvent, EventFilter, MaybePendingBlockWithTxHashes, MaybePendingBlockWithTxs,
+};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::{JsonRpcClient, Provider};
 
@@ -13,6 +15,7 @@ pub async fn fetch_data(
     match dataset {
         Datasets::Blocks => fetch_blocks(client, (block_start, block_end), chunk_id).await,
         Datasets::Transactions => fetch_txs(client, (block_start, block_end), chunk_id).await,
+        Datasets::Logs => fetch_logs(client, (block_start, block_end), chunk_id).await,
         Datasets::None => Data::None,
     }
 }
@@ -70,4 +73,23 @@ pub async fn fetch_txs(
     }
 
     Data::Transactions(data)
+}
+
+pub async fn fetch_logs(
+    client: JsonRpcClient<HttpTransport>,
+    (block_start, block_end): (u64, u64),
+    chunk_id: u16,
+) -> Data {
+    let mut data: Vec<EmittedEvent> = Vec::new();
+
+    let filter = EventFilter {
+        from_block: Some(BlockId::Number(block_start)),
+        to_block: Some(BlockId::Number(block_end)),
+        address: None,
+        keys: None,
+    };
+
+    let events = client.get_events(filter, None, 1).await.unwrap();
+
+    Data::Logs(events.events)
 }

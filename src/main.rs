@@ -1,5 +1,5 @@
 use clap::Parser;
-use starknet::core::types::{BlockWithTxHashes, Transaction};
+use starknet::core::types::{BlockWithTxHashes, EmittedEvent, Event, FieldElement, Transaction};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
@@ -50,6 +50,7 @@ struct Cli {
 enum Datasets {
     Blocks,
     Transactions,
+    Logs,
     // Traces
     // Transactions
     None,
@@ -58,6 +59,7 @@ enum Datasets {
 enum Data {
     Blocks(Vec<BlockWithTxHashes>),
     Transactions(Vec<(Transaction, u64)>),
+    Logs(Vec<EmittedEvent>),
     None,
 }
 
@@ -66,6 +68,7 @@ impl Data {
         match dataset {
             Datasets::Blocks => Data::Blocks(Vec::new()),
             Datasets::Transactions => Data::Transactions(Vec::new()),
+            Datasets::Logs => Data::Logs(Vec::new()),
             Datasets::None => Data::None,
         }
     }
@@ -74,6 +77,7 @@ impl Data {
         match self {
             Data::Blocks(blocks) => blocks.sort_by_key(|b| b.block_number),
             Data::Transactions(txs) => txs.sort_by_key(|tx| tx.1),
+            Data::Logs(logs) => logs.sort_by_key(|event| event.block_number.unwrap()),
             Data::None => (),
         }
     }
@@ -82,6 +86,7 @@ impl Data {
         match (self, data) {
             (Data::Blocks(blocks), Data::Blocks(other_blocks)) => blocks.extend(other_blocks),
             (Data::Transactions(txs), Data::Transactions(other_txs)) => txs.extend(other_txs),
+            (Data::Logs(logs), Data::Logs(other_logs)) => logs.extend(other_logs),
             _ => (),
         }
     }
@@ -104,6 +109,7 @@ async fn main() {
     let dataset = match args.dataset.as_str() {
         "blocks" | "block" => Datasets::Blocks,
         "transactions" | "transaction" => Datasets::Transactions,
+        "logs" | "events" | "log" => Datasets::Logs,
         _ => Datasets::None,
     };
     // TODO analyze output directory to prevent redundant data downloading

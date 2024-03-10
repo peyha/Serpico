@@ -143,6 +143,24 @@ pub fn write_data(data: Data, path: &str) -> Result<()> {
                 wtr.serialize(&record)?;
             }
         }
+        Data::Logs(logs) => {
+            wtr.write_record(&[
+                "block_number",
+                "tx_hash",
+                "contract_address",
+                "keys",
+                "data",
+            ]);
+            for log in logs {
+                wtr.serialize(&[
+                    log.block_number.unwrap().to_string(),
+                    format!("0x{:x}", log.transaction_hash),
+                    format!("0x{:x}", log.from_address),
+                    format!("{:?}", log.keys),
+                    format!("{:?}", log.data),
+                ]);
+            }
+        }
         Data::None => (),
     };
 
