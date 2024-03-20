@@ -27,9 +27,10 @@ cargo run -- --rpc-url <RPC_URL> --blocks <block_start>:<block_end> --dataset <d
 
 With transactions running
 
-````
+```
 cargo run -- --rpc-url $(mesc url blastapi_starknet) --blocks 585084:585085 --dataset transactions --path ./tx.csv
 ```
+
 The script creates a csv which looks like this
 
 ```
@@ -45,4 +46,3 @@ block_number,tx_hash,tx_type,tx_type_version,nonce,caller
 - Handle several RPC at once to improve speed
 - Use Pyo3 to make the tool usable for Python users
 - Add more dataset types to the repo (traces, opcodes, contracts)
-````
