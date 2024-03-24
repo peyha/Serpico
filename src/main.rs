@@ -80,7 +80,7 @@ impl Data {
         match self {
             Data::Blocks(blocks) => blocks.sort_by_key(|b| b.block_number),
             Data::Transactions(txs) => txs.sort_by_key(|tx| tx.1),
-            Data::Logs(logs) => logs.sort_by_key(|event| event.block_number.unwrap()),
+            Data::Logs(logs) => logs.sort_by_key(|event| event.block_number.unwrap_or(0)),
             Data::None => (),
         }
     }
@@ -108,7 +108,7 @@ async fn main() -> Result<(), SerpicoError> {
         .await
         .map_err(SerpicoError::ClientErr)?;
 
-    let (block_start, block_end) = parse_blocks(args.blocks, block_number).unwrap();
+    let (block_start, block_end) = parse_blocks(args.blocks, block_number)?;
     let block_chunks = split_block_chunks(block_start, block_end, args.chunk_size);
 
     println!("There are {} chunks", block_chunks.len());
@@ -130,7 +130,7 @@ async fn main() -> Result<(), SerpicoError> {
         let handle = tokio::spawn(async move {
             fetch_data(
                 JsonRpcClient::new(HttpTransport::new(
-                    Url::parse(cur_rpc_url.as_str()).unwrap(),
+                    Url::parse(cur_rpc_url.as_str()).map_err(SerpicoError::UrlParsingErr)?,
                 )),
                 dataset,
                 (block_chunk_start, block_chunk_end),
@@ -156,7 +156,7 @@ async fn main() -> Result<(), SerpicoError> {
     // Potentially transform data (remove bad columns, parse types, etc)
 
     // Export data
-    write_data(merged_data, args.path.as_str()).unwrap();
+    write_data(merged_data, args.path.as_str())?;
 
     Ok(())
 }
