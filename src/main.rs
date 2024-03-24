@@ -1,8 +1,8 @@
 use clap::Parser;
 use starknet::core::types::{BlockWithTxHashes, EmittedEvent, Event, FieldElement, Transaction};
 use starknet::providers::jsonrpc::HttpTransport;
-use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
+use starknet::providers::{ProviderError, Url};
 use std::sync::Arc;
 
 mod cli_parser;
@@ -16,6 +16,9 @@ use data_writer::write_data;
 
 mod utils;
 use utils::split_block_chunks;
+
+mod error;
+use error::SerpicoError;
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about=None)]
@@ -77,7 +80,7 @@ impl Data {
         match self {
             Data::Blocks(blocks) => blocks.sort_by_key(|b| b.block_number),
             Data::Transactions(txs) => txs.sort_by_key(|tx| tx.1),
-            Data::Logs(logs) => logs.sort_by_key(|event| event.block_number.unwrap()),
+            Data::Logs(logs) => logs.sort_by_key(|event| event.block_number.unwrap_or(0)),
             Data::None => (),
         }
     }
@@ -93,16 +96,19 @@ impl Data {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), SerpicoError> {
     let args = Cli::parse();
 
     let stark_client = JsonRpcClient::new(HttpTransport::new(
-        Url::parse(args.rpc_url.as_str()).unwrap(),
+        Url::parse(args.rpc_url.as_str()).map_err(SerpicoError::UrlParsingErr)?,
     ));
 
-    let block_number = stark_client.block_number().await.unwrap();
+    let block_number = stark_client
+        .block_number()
+        .await
+        .map_err(SerpicoError::ClientErr)?;
 
-    let (block_start, block_end) = parse_blocks(args.blocks, block_number).unwrap();
+    let (block_start, block_end) = parse_blocks(args.blocks, block_number)?;
     let block_chunks = split_block_chunks(block_start, block_end, args.chunk_size);
 
     println!("There are {} chunks", block_chunks.len());
@@ -124,7 +130,7 @@ async fn main() {
         let handle = tokio::spawn(async move {
             fetch_data(
                 JsonRpcClient::new(HttpTransport::new(
-                    Url::parse(cur_rpc_url.as_str()).unwrap(),
+                    Url::parse(cur_rpc_url.as_str()).map_err(SerpicoError::UrlParsingErr)?,
                 )),
                 dataset,
                 (block_chunk_start, block_chunk_end),
@@ -140,7 +146,7 @@ async fn main() {
 
     for handle in handles {
         let data_chunk = handle.await.unwrap();
-        merged_data.extend_data(data_chunk);
+        merged_data.extend_data(data_chunk?);
     }
 
     // sort data
@@ -150,5 +156,7 @@ async fn main() {
     // Potentially transform data (remove bad columns, parse types, etc)
 
     // Export data
-    write_data(merged_data, args.path.as_str()).unwrap();
+    write_data(merged_data, args.path.as_str())?;
+
+    Ok(())
 }

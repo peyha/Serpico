@@ -1,11 +1,11 @@
-use crate::Data;
+use crate::{Data, SerpicoError};
 use anyhow::Result;
 use starknet::core::types::{
     DeclareTransaction, DeployAccountTransaction, InvokeTransaction, Transaction,
 };
 
-pub fn write_data(data: Data, path: &str) -> Result<()> {
-    let mut wtr = csv::Writer::from_path(path)?;
+pub fn write_data(data: Data, path: &str) -> Result<(), SerpicoError> {
+    let mut wtr = csv::Writer::from_path(path).map_err(SerpicoError::WriterErr)?;
 
     match data {
         Data::Blocks(blocks) => {
@@ -21,7 +21,8 @@ pub fn write_data(data: Data, path: &str) -> Result<()> {
                 "l1_gas_price_in_wei",
                 "starknet_version",
                 "tx_count",
-            ])?;
+            ])
+            .map_err(SerpicoError::WriterErr)?;
             for block in blocks {
                 wtr.serialize(&[
                     format!("{:?}", block.status),
@@ -35,7 +36,8 @@ pub fn write_data(data: Data, path: &str) -> Result<()> {
                     block.l1_gas_price.price_in_wei.to_string(),
                     block.starknet_version,
                     block.transactions.len().to_string(),
-                ])?;
+                ])
+                .map_err(SerpicoError::WriterErr)?;
             }
         }
         Data::Transactions(txs) => {
@@ -47,7 +49,8 @@ pub fn write_data(data: Data, path: &str) -> Result<()> {
                 "tx_type_version",
                 "nonce",
                 "caller",
-            ])?;
+            ])
+            .map_err(SerpicoError::WriterErr)?;
             for (tx, block_number) in txs {
                 let record = match tx {
                     Transaction::Invoke(InvokeTransaction::V0(sub_tx)) => [
@@ -140,7 +143,7 @@ pub fn write_data(data: Data, path: &str) -> Result<()> {
                     ],
                 };
 
-                wtr.serialize(&record)?;
+                wtr.serialize(&record).map_err(SerpicoError::WriterErr)?;
             }
         }
         Data::Logs(logs) => {
@@ -150,21 +153,23 @@ pub fn write_data(data: Data, path: &str) -> Result<()> {
                 "contract_address",
                 "keys",
                 "data",
-            ]);
+            ])
+            .map_err(SerpicoError::WriterErr)?;
             for log in logs {
                 wtr.serialize(&[
-                    log.block_number.unwrap().to_string(),
+                    log.block_number.unwrap_or(0).to_string(),
                     format!("0x{:x}", log.transaction_hash),
                     format!("0x{:x}", log.from_address),
                     format!("{:?}", log.keys),
                     format!("{:?}", log.data),
-                ]);
+                ])
+                .map_err(SerpicoError::WriterErr)?;
             }
         }
         Data::None => (),
     };
 
-    wtr.flush()?;
+    wtr.flush().map_err(SerpicoError::IoErr)?;
 
     Ok(())
 }
