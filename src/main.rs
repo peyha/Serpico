@@ -40,7 +40,7 @@ struct Cli {
     #[arg(short, long, default_value_t = String::from("all"))]
     columns: String,
 
-    #[arg(short, long, default_value_t = String::from("example.csv"))]
+    #[arg(short, long, default_value_t = String::from("."))]
     path: String,
 
     #[arg(short, long, default_value_t = String::from("csv"))]
@@ -143,28 +143,21 @@ async fn main() -> Result<(), SerpicoError> {
                 chunk_id as u16,
             )
             .await;
+            let file_name = format!(
+                "{}/{}_block_{}_to_{}.csv",
+                args.path, args.dataset, block_chunk_start, block_chunk_end
+            );
+            write_data(res.unwrap(), file_name.as_str());
             drop(permit);
-            res
+            Ok((block_chunk_start, block_chunk_end))
         });
         handles.push(handle);
         chunk_id += 1;
     }
 
-    let mut merged_data = Data::new(dataset);
-
     for handle in handles {
-        let data_chunk = handle.await.unwrap();
-        merged_data.extend_data(data_chunk?);
+        let res: Result<(u64, u64), SerpicoError> = handle.await.unwrap();
     }
-
-    // sort data
-    merged_data.sort_data();
-    //let data = fetch_data(stark_client, dataset, (block_start, block_end)).await;
-
-    // Potentially transform data (remove bad columns, parse types, etc)
-
-    // Export data
-    write_data(merged_data, args.path.as_str())?;
 
     Ok(())
 }
