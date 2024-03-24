@@ -4,7 +4,6 @@ use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::{JsonRpcClient, Provider};
 use starknet::providers::{ProviderError, Url};
 use std::sync::Arc;
-use url::ParseError;
 
 mod cli_parser;
 use cli_parser::parse_blocks;
@@ -17,6 +16,9 @@ use data_writer::write_data;
 
 mod utils;
 use utils::split_block_chunks;
+
+mod error;
+use error::SerpicoError;
 
 #[derive(Debug, Parser)]
 #[command(version, about, long_about=None)]
@@ -93,24 +95,18 @@ impl Data {
     }
 }
 
-#[derive(Debug)]
-enum SerpicoErr {
-    UrlParsingError(ParseError),
-    ClientError(ProviderError),
-}
-
 #[tokio::main]
-async fn main() -> Result<(), SerpicoErr> {
+async fn main() -> Result<(), SerpicoError> {
     let args = Cli::parse();
 
     let stark_client = JsonRpcClient::new(HttpTransport::new(
-        Url::parse(args.rpc_url.as_str()).map_err(SerpicoErr::UrlParsingError)?,
+        Url::parse(args.rpc_url.as_str()).map_err(SerpicoError::UrlParsingErr)?,
     ));
 
     let block_number = stark_client
         .block_number()
         .await
-        .map_err(SerpicoErr::ClientError)?;
+        .map_err(SerpicoError::ClientErr)?;
 
     let (block_start, block_end) = parse_blocks(args.blocks, block_number).unwrap();
     let block_chunks = split_block_chunks(block_start, block_end, args.chunk_size);
@@ -150,7 +146,7 @@ async fn main() -> Result<(), SerpicoErr> {
 
     for handle in handles {
         let data_chunk = handle.await.unwrap();
-        merged_data.extend_data(data_chunk);
+        merged_data.extend_data(data_chunk?);
     }
 
     // sort data
