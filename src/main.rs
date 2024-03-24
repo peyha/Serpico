@@ -1,9 +1,10 @@
 use clap::Parser;
-use starknet::core::types::{BlockWithTxHashes, EmittedEvent, Event, FieldElement, Transaction};
+use starknet::core::types::{BlockWithTxHashes, EmittedEvent, Transaction};
 use starknet::providers::jsonrpc::HttpTransport;
+use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
-use starknet::providers::{ProviderError, Url};
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 
 mod cli_parser;
 use cli_parser::parse_blocks;
@@ -44,6 +45,9 @@ struct Cli {
 
     #[arg(short, long, default_value_t = String::from("csv"))]
     export_type: String,
+
+    #[arg(short, long, default_value_t = 4)]
+    max_concurrent_chunk: u64,
 
     #[arg(long, default_value_t = 10000)]
     chunk_size: u64,
@@ -122,13 +126,15 @@ async fn main() -> Result<(), SerpicoError> {
 
     let rpc_url = Arc::new(args.rpc_url);
     // Fetch
+    let semaphore = Arc::new(Semaphore::new(args.max_concurrent_chunk as usize));
     let mut handles = Vec::new();
 
     let mut chunk_id = 0;
     for (block_chunk_start, block_chunk_end) in block_chunks {
         let cur_rpc_url = rpc_url.clone();
+        let permit = semaphore.clone().acquire_owned().await.unwrap();
         let handle = tokio::spawn(async move {
-            fetch_data(
+            let res = fetch_data(
                 JsonRpcClient::new(HttpTransport::new(
                     Url::parse(cur_rpc_url.as_str()).map_err(SerpicoError::UrlParsingErr)?,
                 )),
@@ -136,7 +142,9 @@ async fn main() -> Result<(), SerpicoError> {
                 (block_chunk_start, block_chunk_end),
                 chunk_id as u16,
             )
-            .await
+            .await;
+            drop(permit);
+            res
         });
         handles.push(handle);
         chunk_id += 1;
