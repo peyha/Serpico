@@ -3,6 +3,8 @@ use starknet::core::types::{BlockWithTxHashes, EmittedEvent, Transaction};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
+use std::collections::HashSet;
+use std::fs::read_dir;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
@@ -84,6 +86,13 @@ enum Data {
 async fn main() -> Result<(), SerpicoError> {
     let args = Cli::parse();
 
+    let dataset = match args.dataset.as_str() {
+        "blocks" | "block" => Datasets::Blocks,
+        "transactions" | "transaction" => Datasets::Transactions,
+        "logs" | "events" | "log" => Datasets::Logs,
+        _ => Datasets::None,
+    };
+
     let stark_client = JsonRpcClient::new(HttpTransport::new(
         Url::parse(args.rpc_url.as_str()).map_err(SerpicoError::UrlParsingErr)?,
     ));
@@ -94,15 +103,38 @@ async fn main() -> Result<(), SerpicoError> {
         .map_err(SerpicoError::ClientErr)?;
 
     let (block_start, block_end) = parse_blocks(args.blocks, block_number)?;
-    let block_chunks = split_block_chunks(block_start, block_end, args.chunk_size);
+
+    let mut chunks_seen: HashSet<(u64, u64)> = HashSet::new();
+
+    if let Ok(entries) = read_dir(args.path.clone()) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let file_name = entry.file_name();
+                let chunks = file_name
+                    .to_str()
+                    .unwrap()
+                    .split(|c| c == '_' || c == '.')
+                    .collect::<Vec<&str>>();
+
+                if chunks.len() == 6
+                    && chunks[0] == dataset.to_name()
+                    && chunks[1] == "from"
+                    && chunks[3] == "to"
+                    && chunks[5] == args.export_type
+                {
+                    if let Ok(block_start) = chunks[2].parse::<u64>() {
+                        if let Ok(block_end) = chunks[4].parse::<u64>() {
+                            chunks_seen.insert((block_start, block_end));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let block_chunks = split_block_chunks(block_start, block_end, args.chunk_size, &chunks_seen);
 
     println!("There are {} chunks", block_chunks.len());
-    let dataset = match args.dataset.as_str() {
-        "blocks" | "block" => Datasets::Blocks,
-        "transactions" | "transaction" => Datasets::Transactions,
-        "logs" | "events" | "log" => Datasets::Logs,
-        _ => Datasets::None,
-    };
+
     // TODO analyze output directory to prevent redundant data downloading
 
     let rpc_url = Arc::new(args.rpc_url);
@@ -133,7 +165,7 @@ async fn main() -> Result<(), SerpicoError> {
                 block_chunk_start,
                 block_chunk_end
             );
-            write_data(res.unwrap(), file_name.as_str());
+            let _ = write_data(res.unwrap(), file_name.as_str());
             drop(permit);
             Ok((block_chunk_start, block_chunk_end))
         });
@@ -142,7 +174,7 @@ async fn main() -> Result<(), SerpicoError> {
     }
 
     for handle in handles {
-        let res: Result<(u64, u64), SerpicoError> = handle.await.unwrap();
+        let _: Result<(u64, u64), SerpicoError> = handle.await.unwrap();
     }
 
     Ok(())
