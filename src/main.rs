@@ -63,40 +63,21 @@ enum Datasets {
     None,
 }
 
+impl Datasets {
+    pub fn to_name(self) -> &'static str {
+        match self {
+            Datasets::Blocks => "blocks",
+            Datasets::Transactions => "transactions",
+            Datasets::Logs => "logs",
+            Datasets::None => "",
+        }
+    }
+}
 enum Data {
     Blocks(Vec<BlockWithTxHashes>),
     Transactions(Vec<(Transaction, u64)>),
     Logs(Vec<EmittedEvent>),
     None,
-}
-
-impl Data {
-    pub fn new(dataset: Datasets) -> Self {
-        match dataset {
-            Datasets::Blocks => Data::Blocks(Vec::new()),
-            Datasets::Transactions => Data::Transactions(Vec::new()),
-            Datasets::Logs => Data::Logs(Vec::new()),
-            Datasets::None => Data::None,
-        }
-    }
-
-    pub fn sort_data(&mut self) -> () {
-        match self {
-            Data::Blocks(blocks) => blocks.sort_by_key(|b| b.block_number),
-            Data::Transactions(txs) => txs.sort_by_key(|tx| tx.1),
-            Data::Logs(logs) => logs.sort_by_key(|event| event.block_number.unwrap_or(0)),
-            Data::None => (),
-        }
-    }
-
-    pub fn extend_data(&mut self, data: Data) {
-        match (self, data) {
-            (Data::Blocks(blocks), Data::Blocks(other_blocks)) => blocks.extend(other_blocks),
-            (Data::Transactions(txs), Data::Transactions(other_txs)) => txs.extend(other_txs),
-            (Data::Logs(logs), Data::Logs(other_logs)) => logs.extend(other_logs),
-            _ => (),
-        }
-    }
 }
 
 #[tokio::main]
@@ -125,6 +106,7 @@ async fn main() -> Result<(), SerpicoError> {
     // TODO analyze output directory to prevent redundant data downloading
 
     let rpc_url = Arc::new(args.rpc_url);
+    let path = Arc::new(args.path);
     // Fetch
     let semaphore = Arc::new(Semaphore::new(args.max_concurrent_chunk as usize));
     let mut handles = Vec::new();
@@ -132,6 +114,7 @@ async fn main() -> Result<(), SerpicoError> {
     let mut chunk_id = 0;
     for (block_chunk_start, block_chunk_end) in block_chunks {
         let cur_rpc_url = rpc_url.clone();
+        let cur_path = path.clone();
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let handle = tokio::spawn(async move {
             let res = fetch_data(
@@ -144,8 +127,11 @@ async fn main() -> Result<(), SerpicoError> {
             )
             .await;
             let file_name = format!(
-                "{}/{}_block_{}_to_{}.csv",
-                args.path, args.dataset, block_chunk_start, block_chunk_end
+                "{}/{}_from_{}_to_{}.csv",
+                cur_path,
+                dataset.to_name(),
+                block_chunk_start,
+                block_chunk_end
             );
             write_data(res.unwrap(), file_name.as_str());
             drop(permit);
