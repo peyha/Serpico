@@ -1,4 +1,5 @@
 use clap::Parser;
+use polars::frame::DataFrame;
 use starknet::core::types::{BlockWithTxHashes, EmittedEvent, Transaction};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
@@ -82,6 +83,16 @@ enum Data {
     None,
 }
 
+impl Data {
+    pub fn to_dataframe(self) -> DataFrame {
+        match self {
+            Data::Blocks(block) => {}
+            Data::Transactions(txs) => {}
+            Data::Logs(logs) => {}
+            Data::None => {}
+        }
+    }
+}
 #[tokio::main]
 async fn main() -> Result<(), SerpicoError> {
     let args = Cli::parse();
