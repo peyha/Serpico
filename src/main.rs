@@ -1,10 +1,11 @@
 use clap::Parser;
 use polars::frame::DataFrame;
-use starknet::core::types::{BlockWithTxHashes, EmittedEvent, Transaction};
+use polars::prelude::*;
+use starknet::core::types::{BlockStatus, BlockWithTxHashes, EmittedEvent, Transaction};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs::read_dir;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
@@ -85,12 +86,68 @@ enum Data {
 
 impl Data {
     pub fn to_dataframe(self) -> DataFrame {
+        let mut columns = BTreeMap::new();
+
         match self {
-            Data::Blocks(block) => {}
-            Data::Transactions(txs) => {}
-            Data::Logs(logs) => {}
-            Data::None => {}
-        }
+            Data::Blocks(blocks) => {
+                for block in blocks {
+                    columns
+                        .entry("status")
+                        .or_insert(vec![])
+                        .push(format!("{:?}", block.status));
+                    columns
+                        .entry("block_hash")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", block.block_hash));
+                    columns
+                        .entry("parent_hash")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", block.parent_hash));
+                    columns
+                        .entry("block_number")
+                        .or_insert(vec![])
+                        .push(block.block_number.to_string());
+                    columns
+                        .entry("new_root")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", block.new_root));
+                    columns
+                        .entry("timestamp")
+                        .or_insert(vec![])
+                        .push(block.timestamp.to_string());
+                    columns
+                        .entry("sequencer_address")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", block.sequencer_address));
+                    columns
+                        .entry("l1_gas_price_in_fri")
+                        .or_insert(vec![])
+                        .push(block.l1_gas_price.price_in_fri.to_string());
+                    columns
+                        .entry("l1_gas_price_in_wei")
+                        .or_insert(vec![])
+                        .push(block.l1_gas_price.price_in_wei.to_string());
+                    columns
+                        .entry("starknet_version")
+                        .or_insert(vec![])
+                        .push(block.starknet_version);
+                    columns
+                        .entry("tx_count")
+                        .or_insert(vec![])
+                        .push(block.transactions.len().to_string());
+                }
+            }
+            Data::Transactions(txs) => todo!(),
+            Data::Logs(logs) => todo!(),
+            Data::None => todo!(),
+        };
+        DataFrame::new(
+            columns
+                .into_iter()
+                .map(|(name, values)| Series::new(name, values))
+                .collect::<Vec<_>>(),
+        )
+        .unwrap()
     }
 }
 #[tokio::main]
