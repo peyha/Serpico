@@ -138,8 +138,31 @@ impl Data {
                 }
             }
             Data::Transactions(txs) => todo!(),
-            Data::Logs(logs) => todo!(),
-            Data::None => todo!(),
+            Data::Logs(logs) => {
+                for event in logs {
+                    columns
+                        .entry("block_number")
+                        .or_insert(vec![])
+                        .push(event.block_number.unwrap_or(0).to_string());
+                    columns
+                        .entry("tx_hash")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", event.transaction_hash));
+                    columns
+                        .entry("contract_address")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", event.from_address));
+                    columns.entry("keys").or_insert(vec![]).push(format!(
+                        "{:?}",
+                        event.keys.iter().map(|x| format!("0x{:x}", x))
+                    ));
+                    columns.entry("data").or_insert(vec![]).push(format!(
+                        "{:?}",
+                        event.data.iter().map(|x| format!("0x{:x}", x))
+                    ));
+                }
+            }
+            Data::None => (),
         };
         DataFrame::new(
             columns
