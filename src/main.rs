@@ -1,7 +1,10 @@
 use clap::Parser;
 use polars::frame::DataFrame;
 use polars::prelude::*;
-use starknet::core::types::{BlockStatus, BlockWithTxHashes, EmittedEvent, Transaction};
+use starknet::core::types::{
+    BlockStatus, BlockWithTxHashes, EmittedEvent, InvokeTransaction, Transaction,
+};
+use starknet::core::types::{DeclareTransaction, DeployAccountTransaction};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
@@ -137,7 +140,102 @@ impl Data {
                         .push(block.transactions.len().to_string());
                 }
             }
-            Data::Transactions(txs) => todo!(),
+            Data::Transactions(txs) => {
+                for (tx, block_number) in txs {
+                    columns
+                        .entry("block_number")
+                        .or_insert(vec![])
+                        .push(block_number.to_string());
+                    columns
+                        .entry("transaction_hash")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", tx.transaction_hash()));
+
+                    let (tx_type, version, nonce, caller) = match tx {
+                        Transaction::Invoke(InvokeTransaction::V0(_)) => (
+                            "Invoke".to_string(),
+                            "V0".to_string(),
+                            "None".to_string(),
+                            "None".to_string(),
+                        ),
+                        Transaction::Invoke(InvokeTransaction::V1(sub_tx)) => (
+                            "Invoke".to_string(),
+                            "V1".to_string(),
+                            sub_tx.nonce.to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::Invoke(InvokeTransaction::V3(sub_tx)) => (
+                            "Invoke".to_string(),
+                            "V3".to_string(),
+                            sub_tx.nonce.to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::L1Handler(sub_tx) => (
+                            "L1Handler".to_string(),
+                            sub_tx.version.to_string(),
+                            sub_tx.nonce.to_string().clone(),
+                            "None".to_string(),
+                        ),
+                        Transaction::Declare(DeclareTransaction::V0(sub_tx)) => (
+                            "Declare".to_string(),
+                            "V0".to_string(),
+                            "None".to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::Declare(DeclareTransaction::V1(sub_tx)) => (
+                            "Declare".to_string(),
+                            "V1".to_string(),
+                            sub_tx.nonce.to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::Declare(DeclareTransaction::V2(sub_tx)) => (
+                            "Declare".to_string(),
+                            "V2".to_string(),
+                            sub_tx.nonce.to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::Declare(DeclareTransaction::V3(sub_tx)) => (
+                            "Declare".to_string(),
+                            "V3".to_string(),
+                            sub_tx.nonce.to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::Deploy(sub_tx) => (
+                            "Deploy".to_string(),
+                            sub_tx.version.to_string(),
+                            "None".to_string(),
+                            "None".to_string(),
+                        ),
+                        Transaction::DeployAccount(DeployAccountTransaction::V1(sub_tx)) => (
+                            "DeployAccount".to_string(),
+                            "V1".to_string(),
+                            sub_tx.nonce.to_string(),
+                            "None".to_string(),
+                        ),
+                        Transaction::DeployAccount(DeployAccountTransaction::V3(sub_tx)) => (
+                            "DeployAccount".to_string(),
+                            "V3".to_string(),
+                            sub_tx.nonce.to_string(),
+                            "None".to_string(),
+                        ),
+                    };
+
+                    columns.entry("tx_type").or_insert(vec![]).push(tx_type);
+                    columns
+                        .entry("tx_type_version")
+                        .or_insert(vec![])
+                        .push(version);
+
+                    columns
+                        .entry("nonce")
+                        .or_insert(vec![])
+                        .push(nonce.to_string());
+                    columns
+                        .entry("caller")
+                        .or_insert(vec![])
+                        .push(caller.to_string());
+                }
+            }
             Data::Logs(logs) => {
                 for event in logs {
                     columns
