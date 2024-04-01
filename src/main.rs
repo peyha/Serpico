@@ -340,6 +340,7 @@ async fn main() -> Result<(), SerpicoError> {
 
     let rpc_url = Arc::new(args.rpc_url);
     let path = Arc::new(args.path);
+    let export_type = Arc::new(args.export_type);
     // Fetch
     let semaphore = Arc::new(Semaphore::new(args.max_concurrent_chunk as usize));
     let mut handles = Vec::new();
@@ -348,6 +349,7 @@ async fn main() -> Result<(), SerpicoError> {
     for (block_chunk_start, block_chunk_end) in block_chunks {
         let cur_rpc_url = rpc_url.clone();
         let cur_path = path.clone();
+        let cur_export_type = export_type.clone();
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let handle = tokio::spawn(async move {
             let res = fetch_data(
@@ -362,15 +364,26 @@ async fn main() -> Result<(), SerpicoError> {
             let mut dataframe = res.unwrap().to_dataframe();
 
             let file_name = format!(
-                "{}/{}_from_{}_to_{}.csv",
+                "{}/{}_from_{}_to_{}.{}",
                 cur_path,
                 dataset.to_name(),
                 block_chunk_start,
-                block_chunk_end
+                block_chunk_end,
+                cur_export_type,
             );
-
             let mut file = File::create(file_name.as_str()).unwrap();
-            CsvWriter::new(&mut file).finish(&mut dataframe).unwrap();
+            match cur_export_type.as_str() {
+                "csv" => {
+                    CsvWriter::new(&mut file).finish(&mut dataframe).unwrap();
+                }
+                "parquet" => {
+                    ParquetWriter::new(&mut file)
+                        .finish(&mut dataframe)
+                        .unwrap();
+                }
+                _ => (),
+            };
+
             drop(permit);
             Ok((block_chunk_start, block_chunk_end))
         });
