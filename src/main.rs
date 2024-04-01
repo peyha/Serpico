@@ -9,7 +9,7 @@ use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
 use std::collections::{BTreeMap, HashSet};
-use std::fs::read_dir;
+use std::fs::{read_dir, File};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
@@ -347,6 +347,8 @@ async fn main() -> Result<(), SerpicoError> {
                 chunk_id as u16,
             )
             .await;
+            let mut dataframe = res.unwrap().to_dataframe();
+
             let file_name = format!(
                 "{}/{}_from_{}_to_{}.csv",
                 cur_path,
@@ -354,7 +356,9 @@ async fn main() -> Result<(), SerpicoError> {
                 block_chunk_start,
                 block_chunk_end
             );
-            let _ = write_data(res.unwrap(), file_name.as_str());
+
+            let mut file = File::create(file_name.as_str()).unwrap();
+            CsvWriter::new(&mut file).finish(&mut dataframe).unwrap();
             drop(permit);
             Ok((block_chunk_start, block_chunk_end))
         });
