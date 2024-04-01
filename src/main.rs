@@ -250,14 +250,26 @@ impl Data {
                         .entry("contract_address")
                         .or_insert(vec![])
                         .push(format!("0x{:x}", event.from_address));
-                    columns.entry("keys").or_insert(vec![]).push(format!(
-                        "{:?}",
-                        event.keys.iter().map(|x| format!("0x{:x}", x))
-                    ));
-                    columns.entry("data").or_insert(vec![]).push(format!(
-                        "{:?}",
-                        event.data.iter().map(|x| format!("0x{:x}", x))
-                    ));
+                    let mut keys = "[".to_string();
+                    let n = event.keys.len();
+                    for (i, key) in event.keys.iter().enumerate() {
+                        keys.push_str(format!("0x{:x}", key).as_str());
+                        if i < n - 1 {
+                            keys.push_str(",");
+                        }
+                    }
+                    keys.push_str("]");
+                    columns.entry("keys").or_insert(vec![]).push(keys);
+                    let m = event.data.len();
+                    let mut data = "[".to_string();
+                    for (i, d) in event.data.iter().enumerate() {
+                        data.push_str(format!("0x{:x}", d).as_str());
+                        if i < m - 1 {
+                            data.push_str(",");
+                        }
+                    }
+                    data.push_str("]");
+                    columns.entry("data").or_insert(vec![]).push(data);
                 }
             }
             Data::None => (),
