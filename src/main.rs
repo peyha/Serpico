@@ -1,10 +1,15 @@
 use clap::Parser;
-use starknet::core::types::{BlockWithTxHashes, EmittedEvent, Transaction};
+use polars::frame::DataFrame;
+use polars::prelude::*;
+use starknet::core::types::{
+    BlockStatus, BlockWithTxHashes, EmittedEvent, InvokeTransaction, Transaction,
+};
+use starknet::core::types::{DeclareTransaction, DeployAccountTransaction};
 use starknet::providers::jsonrpc::HttpTransport;
 use starknet::providers::Url;
 use starknet::providers::{JsonRpcClient, Provider};
-use std::collections::HashSet;
-use std::fs::read_dir;
+use std::collections::{BTreeMap, HashSet};
+use std::fs::{read_dir, File};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 
@@ -82,6 +87,202 @@ enum Data {
     None,
 }
 
+impl Data {
+    pub fn to_dataframe(self) -> DataFrame {
+        let mut columns = BTreeMap::new();
+
+        match self {
+            Data::Blocks(blocks) => {
+                for block in blocks {
+                    columns
+                        .entry("status")
+                        .or_insert(vec![])
+                        .push(format!("{:?}", block.status));
+                    columns
+                        .entry("block_hash")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", block.block_hash));
+                    columns
+                        .entry("parent_hash")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", block.parent_hash));
+                    columns
+                        .entry("block_number")
+                        .or_insert(vec![])
+                        .push(block.block_number.to_string());
+                    columns
+                        .entry("new_root")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", block.new_root));
+                    columns
+                        .entry("timestamp")
+                        .or_insert(vec![])
+                        .push(block.timestamp.to_string());
+                    columns
+                        .entry("sequencer_address")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", block.sequencer_address));
+                    columns
+                        .entry("l1_gas_price_in_fri")
+                        .or_insert(vec![])
+                        .push(block.l1_gas_price.price_in_fri.to_string());
+                    columns
+                        .entry("l1_gas_price_in_wei")
+                        .or_insert(vec![])
+                        .push(block.l1_gas_price.price_in_wei.to_string());
+                    columns
+                        .entry("starknet_version")
+                        .or_insert(vec![])
+                        .push(block.starknet_version);
+                    columns
+                        .entry("tx_count")
+                        .or_insert(vec![])
+                        .push(block.transactions.len().to_string());
+                }
+            }
+            Data::Transactions(txs) => {
+                for (tx, block_number) in txs {
+                    columns
+                        .entry("block_number")
+                        .or_insert(vec![])
+                        .push(block_number.to_string());
+                    columns
+                        .entry("transaction_hash")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", tx.transaction_hash()));
+
+                    let (tx_type, version, nonce, caller) = match tx {
+                        Transaction::Invoke(InvokeTransaction::V0(_)) => (
+                            "Invoke".to_string(),
+                            "V0".to_string(),
+                            "None".to_string(),
+                            "None".to_string(),
+                        ),
+                        Transaction::Invoke(InvokeTransaction::V1(sub_tx)) => (
+                            "Invoke".to_string(),
+                            "V1".to_string(),
+                            sub_tx.nonce.to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::Invoke(InvokeTransaction::V3(sub_tx)) => (
+                            "Invoke".to_string(),
+                            "V3".to_string(),
+                            sub_tx.nonce.to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::L1Handler(sub_tx) => (
+                            "L1Handler".to_string(),
+                            sub_tx.version.to_string(),
+                            sub_tx.nonce.to_string().clone(),
+                            "None".to_string(),
+                        ),
+                        Transaction::Declare(DeclareTransaction::V0(sub_tx)) => (
+                            "Declare".to_string(),
+                            "V0".to_string(),
+                            "None".to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::Declare(DeclareTransaction::V1(sub_tx)) => (
+                            "Declare".to_string(),
+                            "V1".to_string(),
+                            sub_tx.nonce.to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::Declare(DeclareTransaction::V2(sub_tx)) => (
+                            "Declare".to_string(),
+                            "V2".to_string(),
+                            sub_tx.nonce.to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::Declare(DeclareTransaction::V3(sub_tx)) => (
+                            "Declare".to_string(),
+                            "V3".to_string(),
+                            sub_tx.nonce.to_string(),
+                            format!("0x{:x}", sub_tx.sender_address),
+                        ),
+                        Transaction::Deploy(sub_tx) => (
+                            "Deploy".to_string(),
+                            sub_tx.version.to_string(),
+                            "None".to_string(),
+                            "None".to_string(),
+                        ),
+                        Transaction::DeployAccount(DeployAccountTransaction::V1(sub_tx)) => (
+                            "DeployAccount".to_string(),
+                            "V1".to_string(),
+                            sub_tx.nonce.to_string(),
+                            "None".to_string(),
+                        ),
+                        Transaction::DeployAccount(DeployAccountTransaction::V3(sub_tx)) => (
+                            "DeployAccount".to_string(),
+                            "V3".to_string(),
+                            sub_tx.nonce.to_string(),
+                            "None".to_string(),
+                        ),
+                    };
+
+                    columns.entry("tx_type").or_insert(vec![]).push(tx_type);
+                    columns
+                        .entry("tx_type_version")
+                        .or_insert(vec![])
+                        .push(version);
+
+                    columns
+                        .entry("nonce")
+                        .or_insert(vec![])
+                        .push(nonce.to_string());
+                    columns
+                        .entry("caller")
+                        .or_insert(vec![])
+                        .push(caller.to_string());
+                }
+            }
+            Data::Logs(logs) => {
+                for event in logs {
+                    columns
+                        .entry("block_number")
+                        .or_insert(vec![])
+                        .push(event.block_number.unwrap_or(0).to_string());
+                    columns
+                        .entry("tx_hash")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", event.transaction_hash));
+                    columns
+                        .entry("contract_address")
+                        .or_insert(vec![])
+                        .push(format!("0x{:x}", event.from_address));
+                    let mut keys = "[".to_string();
+                    let n = event.keys.len();
+                    for (i, key) in event.keys.iter().enumerate() {
+                        keys.push_str(format!("0x{:x}", key).as_str());
+                        if i < n - 1 {
+                            keys.push_str(",");
+                        }
+                    }
+                    keys.push_str("]");
+                    columns.entry("keys").or_insert(vec![]).push(keys);
+                    let m = event.data.len();
+                    let mut data = "[".to_string();
+                    for (i, d) in event.data.iter().enumerate() {
+                        data.push_str(format!("0x{:x}", d).as_str());
+                        if i < m - 1 {
+                            data.push_str(",");
+                        }
+                    }
+                    data.push_str("]");
+                    columns.entry("data").or_insert(vec![]).push(data);
+                }
+            }
+            Data::None => (),
+        };
+        DataFrame::new(
+            columns
+                .into_iter()
+                .map(|(name, values)| Series::new(name, values))
+                .collect::<Vec<_>>(),
+        )
+        .unwrap()
+    }
+}
 #[tokio::main]
 async fn main() -> Result<(), SerpicoError> {
     let args = Cli::parse();
@@ -139,6 +340,7 @@ async fn main() -> Result<(), SerpicoError> {
 
     let rpc_url = Arc::new(args.rpc_url);
     let path = Arc::new(args.path);
+    let export_type = Arc::new(args.export_type);
     // Fetch
     let semaphore = Arc::new(Semaphore::new(args.max_concurrent_chunk as usize));
     let mut handles = Vec::new();
@@ -147,6 +349,7 @@ async fn main() -> Result<(), SerpicoError> {
     for (block_chunk_start, block_chunk_end) in block_chunks {
         let cur_rpc_url = rpc_url.clone();
         let cur_path = path.clone();
+        let cur_export_type = export_type.clone();
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let handle = tokio::spawn(async move {
             let res = fetch_data(
@@ -158,14 +361,29 @@ async fn main() -> Result<(), SerpicoError> {
                 chunk_id as u16,
             )
             .await;
+            let mut dataframe = res.unwrap().to_dataframe();
+
             let file_name = format!(
-                "{}/{}_from_{}_to_{}.csv",
+                "{}/{}_from_{}_to_{}.{}",
                 cur_path,
                 dataset.to_name(),
                 block_chunk_start,
-                block_chunk_end
+                block_chunk_end,
+                cur_export_type,
             );
-            let _ = write_data(res.unwrap(), file_name.as_str());
+            let mut file = File::create(file_name.as_str()).unwrap();
+            match cur_export_type.as_str() {
+                "csv" => {
+                    CsvWriter::new(&mut file).finish(&mut dataframe).unwrap();
+                }
+                "parquet" => {
+                    ParquetWriter::new(&mut file)
+                        .finish(&mut dataframe)
+                        .unwrap();
+                }
+                _ => (),
+            };
+
             drop(permit);
             Ok((block_chunk_start, block_chunk_end))
         });
