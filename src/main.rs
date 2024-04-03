@@ -19,9 +19,6 @@ use cli_parser::parse_blocks;
 mod data_fetcher;
 use data_fetcher::fetch_data;
 
-mod data_writer;
-use data_writer::write_data;
-
 mod utils;
 use utils::split_block_chunks;
 
