@@ -19,9 +19,6 @@ use cli_parser::parse_blocks;
 mod data_fetcher;
 use data_fetcher::fetch_data;
 
-mod data_writer;
-use data_writer::write_data;
-
 mod utils;
 use utils::split_block_chunks;
 
@@ -305,7 +302,7 @@ async fn main() -> Result<(), SerpicoError> {
 
     let (block_start, block_end) = parse_blocks(args.blocks, block_number)?;
 
-    let mut chunks_seen: HashSet<(u64, u64)> = HashSet::new();
+    let mut chunks_seen: Vec<(u64, u64)> = Vec::new();
 
     if let Ok(entries) = read_dir(args.path.clone()) {
         for entry in entries {
@@ -325,14 +322,15 @@ async fn main() -> Result<(), SerpicoError> {
                 {
                     if let Ok(block_start) = chunks[2].parse::<u64>() {
                         if let Ok(block_end) = chunks[4].parse::<u64>() {
-                            chunks_seen.insert((block_start, block_end));
+                            chunks_seen.push((block_start, block_end));
                         }
                     }
                 }
             }
         }
     }
-    let block_chunks = split_block_chunks(block_start, block_end, args.chunk_size, &chunks_seen);
+    let block_chunks =
+        split_block_chunks(block_start, block_end, args.chunk_size, &mut chunks_seen);
 
     println!("There are {} chunks", block_chunks.len());
 
